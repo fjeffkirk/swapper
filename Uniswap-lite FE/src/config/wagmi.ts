@@ -13,8 +13,6 @@ export const customChain: Chain = {
 export const wagmiConfig = createConfig({
   chains: [customChain],
   transports: { [customChain.id]: http(NETWORK_INFO.rpcUrl) },
-  autoConnect: true,
   multiInjectedProviderDiscovery: true,
   ssr: false,
-  storage: localStorage,
 });

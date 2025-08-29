@@ -78,7 +78,7 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
             <Typography variant="caption" color="text.secondary">Balance: {sellBalanceDisplay}</Typography>
           </Box>
 
-          <Stack alignItems="center"><IconButton size="small" onClick={async () => { const next = sellToken === 'TIA' ? 'YTK' : 'TIA'; setSellToken(next); await refreshQuote(amount, next); }} aria-label="switch tokens"><ArrowDownwardIcon /></IconButton></Stack>
+          <Stack alignItems="center"><IconButton size="small" onClick={async () => { const next: 'TIA'|'YTK' = sellToken === 'TIA' ? 'YTK' : 'TIA'; setSellToken(next); await refreshQuote(amount, next); }} aria-label="switch tokens"><ArrowDownwardIcon /></IconButton></Stack>
 
           <Box>
             <Typography variant="caption" color="text.secondary">Buy</Typography>
