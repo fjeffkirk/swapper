@@ -3,6 +3,7 @@ import { BrowserProvider, JsonRpcProvider, Contract, formatEther, formatUnits, p
 import { useAccount } from 'wagmi';
 import { NETWORK_INFO } from './config/privy';
 import { Box, Container, Tab, Tabs } from '@mui/material';
+import logo from './assets/logo.png';
 import SwapCard from './components/SwapCard';
 import WalletButton from './components/WalletButton';
 import LiquidityCard from './components/LiquidityCard';
@@ -32,6 +33,7 @@ const weth9Abi = [
 const routerAbi = [
   'function WETH() view returns(address)',
   'function factory() view returns(address)',
+  'function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)',
   'function addLiquidityETH(address token,uint amountTokenDesired,uint amountTokenMin,uint amountETHMin,address to,uint deadline) payable returns (uint amountToken,uint amountETH,uint liquidity)',
   'function swapExactETHForTokens(uint amountOutMin,address[] calldata path,address to,uint deadline) payable returns (uint[] memory amounts)',
   'function swapExactTokensForETH(uint amountIn,uint amountOutMin,address[] calldata path,address to,uint deadline) returns (uint[] memory amounts)'
@@ -189,42 +191,67 @@ export default function App() {
     setApproved(true);
   }
 
+  // Quote helper for UI
+  async function getQuote(sellToken: 'TIA' | 'YTK', amount: string): Promise<string> {
+    try {
+      if (!amount || Number(amount) <= 0) return '';
+      const isSellTia = sellToken === 'TIA';
+      const amountIn = isSellTia ? parseEther(amount) : parseUnits(amount, ytkDec);
+      const path = isSellTia ? [WTIA, YTK] : [YTK, WTIA];
+      const amounts: bigint[] = await (router as any).getAmountsOut(amountIn, path);
+      const out = amounts[amounts.length - 1];
+      return isSellTia ? formatUnits(out, ytkDec) : formatEther(out);
+    } catch (_) {
+      return '';
+    }
+  }
+
   return (
-    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', py: 4 }}>
-      <Box sx={{ width: '100%', mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div />
-        <Tabs value={tab} onChange={(_,v)=>setTab(v)} variant="standard" textColor="inherit" indicatorColor="primary">
-          <Tab label="Swap" sx={{ textTransform: 'none', fontWeight: 700 }} />
-          <Tab label="Liquidity" sx={{ textTransform: 'none', fontWeight: 700 }} />
-        </Tabs>
-        {/* top right wallet button */}
+    <Container maxWidth={false} sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', px: 0 }}>
+      {/* Top nav */}
+      <Box sx={{ width: '100%', py: 2, px: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'background.paper', boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}>
+        <Box component="img" src={logo} alt="Swapper" sx={{ height: 28 }} />
         <WalletButton />
       </Box>
-      <Box sx={{ width: '100%', mb: 2 }}>
-        <NetworkChecker />
-      </Box>
-      <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {tab === 0 ? (
-          <SwapCard
-            account={account || null}
-            tiaBalance={tiaBal}
-            wtiaBalance={wtiaBal}
-            ytkBalance={ytkBal}
-            onConnect={connect}
-            onSwapEthToYtk={swapTIAforYTK}
-            onSwapYtkToEth={swapYTKforTIA}
-          />
-        ) : (
-          <LiquidityCard
-            account={account || null}
-            tiaBalance={tiaBal}
-            ytkBalance={ytkBal}
-            isApproved={approved}
-            onConnect={connect}
-            onApproveYtk={approveYtk}
-            onAddLiquidityEth={addLiquidityEth}
-          />
-        )}
+      {/* Center tabs + card vertically together */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <Container maxWidth="sm" sx={{ pb: 0, mb: 0 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Tabs value={tab} onChange={(_,v)=>setTab(v)} centered variant="standard" textColor="inherit" indicatorColor="primary">
+              <Tab label="Swap" sx={{ textTransform: 'none', fontWeight: 700 }} />
+              <Tab label="Liquidity" sx={{ textTransform: 'none', fontWeight: 700 }} />
+            </Tabs>
+          </Box>
+        </Container>
+        <Container maxWidth="sm">
+          <Box sx={{ width: '100%', mb: 2 }}>
+            <NetworkChecker />
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            {tab === 0 ? (
+              <SwapCard
+                account={account || null}
+                tiaBalance={tiaBal}
+                wtiaBalance={wtiaBal}
+                ytkBalance={ytkBal}
+                getQuote={getQuote}
+                onConnect={connect}
+                onSwapEthToYtk={swapTIAforYTK}
+                onSwapYtkToEth={swapYTKforTIA}
+              />
+            ) : (
+              <LiquidityCard
+                account={account || null}
+                tiaBalance={tiaBal}
+                ytkBalance={ytkBal}
+                isApproved={approved}
+                onConnect={connect}
+                onApproveYtk={approveYtk}
+                onAddLiquidityEth={addLiquidityEth}
+              />
+            )}
+          </Box>
+        </Container>
       </Box>
     </Container>
   );
