@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Box, Button, Card, CardContent, Divider, IconButton, InputAdornment, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, Divider, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { usePrivy } from '@privy-io/react-auth';
 import { useAccount } from 'wagmi';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import TokenIcon from './TokenIcon';
-import TokenSelect from './TokenSelect';
+import TokenSelect, { TokenSymbol } from './TokenSelect';
 
 function formatBalance(value: string): string {
   const num = Number(value);
@@ -19,17 +19,15 @@ function formatBalance(value: string): string {
 }
 
 export type SwapCardProps = {
-  account: string | null;
   tiaBalance: string;
   wtiaBalance: string;
   ytkBalance: string;
   getQuote: (sellToken: 'TIA'|'YTK', amount: string) => Promise<string>;
-  onConnect: () => Promise<void>;
   onSwapEthToYtk: (tia: string) => Promise<void>;
   onSwapYtkToEth: (ytk: string) => Promise<void>;
 };
 
-export default function SwapCard({ account, tiaBalance, wtiaBalance, ytkBalance, getQuote, onConnect, onSwapEthToYtk, onSwapYtkToEth }: SwapCardProps) {
+export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote, onSwapEthToYtk, onSwapYtkToEth }: SwapCardProps) {
   const [sellToken, setSellToken] = useState<'TIA'|'YTK'>('TIA');
   const [amount, setAmount] = useState<string>('');
 
@@ -75,8 +73,8 @@ export default function SwapCard({ account, tiaBalance, wtiaBalance, ytkBalance,
 
           <Box>
             <Typography variant="caption" color="text.secondary">Sell</Typography>
-            <TextField fullWidth value={amount} onChange={async e=>{ const v = e.target.value; setAmount(v); await refreshQuote(v, sellToken); }} placeholder="0"
-              InputProps={{ endAdornment: <InputAdornment position="end"><TokenSelect value={sellToken} onChange={(v)=>setSellToken(v)} /></InputAdornment> }} />
+            <TextField fullWidth value={amount} onChange={async (e)=>{ const v = (e.target as HTMLInputElement).value; setAmount(v); await refreshQuote(v, sellToken); }} placeholder="0"
+              InputProps={{ endAdornment: <InputAdornment position="end"><TokenSelect value={sellToken} onChange={(v)=>setSellToken(v === 'YTK' ? 'YTK' : 'TIA')} /></InputAdornment> }} />
             <Typography variant="caption" color="text.secondary">Balance: {sellBalanceDisplay}</Typography>
           </Box>
 

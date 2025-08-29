@@ -230,12 +230,10 @@ export default function App() {
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
             {tab === 0 ? (
               <SwapCard
-                account={account || null}
                 tiaBalance={tiaBal}
                 wtiaBalance={wtiaBal}
                 ytkBalance={ytkBal}
                 getQuote={getQuote}
-                onConnect={connect}
                 onSwapEthToYtk={swapTIAforYTK}
                 onSwapYtkToEth={swapYTKforTIA}
               />
