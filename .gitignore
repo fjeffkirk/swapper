@@ -1,0 +1,22 @@
+# Node/JS
+node_modules/
+**/node_modules/
+dist/
+build/
+*.log
+
+# Vite/React
+"Uniswap-lite FE"/dist/
+
+# Foundry/Solidity
+"Uniswap-contract"/out/
+"Uniswap-contract"/cache/
+
+# Env
+.env
+.env.*
+.env.local
+
+# Misc
+.vscode/
+.DS_Store

@@ -1,0 +1,8 @@
+﻿[profile.default]
+src = "src"
+script = "script"
+libs = ["lib"]
+evm_version = "paris"
+solc_version = "0.8.21"
+optimizer = true
+optimizer_runs = 20000
