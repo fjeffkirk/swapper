@@ -90,7 +90,7 @@ export default function SwapCard({ account, tiaBalance, wtiaBalance, ytkBalance,
 
           <Divider />
 
-          {/* Slippage + Quote details */}
+          {/* Slippage + Minimum received */}
           <Box>
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
               <Typography variant="caption" color="text.secondary">Slippage</Typography>
@@ -104,7 +104,7 @@ export default function SwapCard({ account, tiaBalance, wtiaBalance, ytkBalance,
             </Stack>
             {quote && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                Est.: {formatBalance(quote)} {buyToken} · Min received ({slippagePct}%): {minReceived} {buyToken}
+                Minimum received ({slippagePct}%): {minReceived} {buyToken}
               </Typography>
             )}
           </Box>
