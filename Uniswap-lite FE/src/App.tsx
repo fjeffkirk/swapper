@@ -8,33 +8,43 @@ import SwapCard from './components/SwapCard';
 import WalletButton from './components/WalletButton';
 import LiquidityCard from './components/LiquidityCard';
 import NetworkChecker from './components/NetworkChecker';
+import WalletConnectionTest from './components/WalletConnectionTest';
+import {
+  SWAP_CONSTANTS,
+  ERROR_MESSAGES,
+  APPROVAL_AMOUNTS,
+  handleSwapError,
+  handleLiquidityError,
+  handleApprovalError,
+  addGasBuffer,
+  validateSwapAmount,
+  safeParseAmount,
+  type TokenSymbol,
+  type LiquidityCalculation,
+} from './utils';
 
 // Use single source of truth from privy config (env-driven)
-const RPC: string  = NETWORK_INFO.rpcUrl as string;
+const RPC: string = NETWORK_INFO.rpcUrl as string;
 const CHAIN_ID: number = Number(NETWORK_INFO.chainId);
-// Router address from your deployment
-const ROUTER: string = (import.meta.env.VITE_ROUTER as string) || '0x592a36b069843cbaEB0df6FA1cFae5009418E45d';
-    console.log('🔄 Router address:', ROUTER);
-    console.log('🔄 VITE_ROUTER env:', import.meta.env.VITE_ROUTER);
-    console.log('🔄 Environment check:', { VITE_ROUTER: import.meta.env.VITE_ROUTER });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-// Use router's WETH address (discovered via check-pool.js)
-const WTIA: string   = '0xBae5E4D473FdAAc18883850c56857Be7874b7B9c';
-// Your deployed YTK token
-const YTK: string    = (import.meta.env.VITE_YTK as string) || '0x00822A3c6CA0E9944B3fc4b79849fa20037fa2C6';
 
+// Contract addresses with fallbacks
+const ROUTER: string = (import.meta.env.VITE_ROUTER as string) || '0x592a36b069843cbaEB0df6FA1cFae5009418E45d';
+const WTIA: string = '0xBae5E4D473FdAAc18883850c56857Be7874b7B9c';
+const YTK: string = (import.meta.env.VITE_YTK as string) || '0x00822A3c6CA0E9944B3fc4b79849fa20037fa2C6';
+
+// Contract ABIs with proper typing
 const erc20Abi = [
   'function decimals() view returns(uint8)',
   'function balanceOf(address) view returns(uint256)',
   'function allowance(address owner, address spender) view returns(uint256)',
   'function approve(address spender, uint256 value) returns (bool)'
-];
+] as const;
 
 const weth9Abi = [
   ...erc20Abi,
   'function deposit() payable',
   'function withdraw(uint256)'
-];
+] as const;
 
 const routerAbi = [
   'function WETH() view returns(address)',
@@ -43,7 +53,7 @@ const routerAbi = [
   'function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)',
   'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)',
   'function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) payable returns (uint amountToken, uint amountETH, uint liquidity)'
-];
+] as const;
 
 export default function App() {
   const [account, setAccount] = useState<string>('');
@@ -52,36 +62,63 @@ export default function App() {
   const [tiaBal, setTiaBal] = useState<string>('0');
   const [wtiaBal, setWtiaBal] = useState<string>('0');
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isSwapping, setIsSwapping] = useState<boolean>(false);
+  const [isAddingLiquidity, setIsAddingLiquidity] = useState<boolean>(false);
+  const [isApproving, setIsApproving] = useState<boolean>(false);
   const { address } = useAccount();
 
   const rpcProvider = useMemo(() => new JsonRpcProvider(RPC, CHAIN_ID), []);
   // Always use rpcProvider for read calls to avoid wallet network/provider quirks
   const router = useMemo(() => new Contract(ROUTER, routerAbi, rpcProvider), [rpcProvider]);
-  const ytk    = useMemo(() => new Contract(YTK,    erc20Abi,  rpcProvider), [rpcProvider]);
-  const wtia   = useMemo(() => new Contract(WTIA,   weth9Abi,  rpcProvider), [rpcProvider]);
+  const ytk = useMemo(() => new Contract(YTK, erc20Abi, rpcProvider), [rpcProvider]);
+  const wtia = useMemo(() => new Contract(WTIA, weth9Abi, rpcProvider), [rpcProvider]);
 
-  async function connect() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const eth = (window as any).ethereum;
-    if (!eth) { alert('Install MetaMask'); return; }
-    const p = new BrowserProvider(eth);
-    const network = await p.getNetwork();
-    if (Number(network.chainId) !== CHAIN_ID) {
-      await eth.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x' + CHAIN_ID.toString(16),
-          chainName: 'Forma Sketchpad',
-          nativeCurrency: { name: 'TIA', symbol: 'TIA', decimals: 18 },
-          rpcUrls: [RPC],
-          blockExplorerUrls: []
-        }]
-      });
+
+
+  const connect = useCallback(async () => {
+    if (isConnecting) return;
+    setIsConnecting(true);
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const eth = (window as any).ethereum;
+      if (!eth) {
+        alert('Please install MetaMask or another Web3 wallet. Make sure you\'re using HTTPS in production.');
+        return;
+      }
+
+      // Additional check for wallet availability
+      if (!eth.isMetaMask && !eth.isCoinbaseWallet && !eth.isTrust) {
+        console.warn('Wallet detected but may not be fully compatible');
+      }
+
+      const p = new BrowserProvider(eth);
+      const network = await p.getNetwork();
+
+      if (Number(network.chainId) !== CHAIN_ID) {
+        await eth.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x' + CHAIN_ID.toString(16),
+            chainName: 'Forma Sketchpad',
+            nativeCurrency: { name: 'TIA', symbol: 'TIA', decimals: 18 },
+            rpcUrls: [RPC],
+            blockExplorerUrls: []
+          }]
+        });
+      }
+
+      const [addr] = await eth.request({ method: 'eth_requestAccounts' });
+      setProvider(p);
+      setAccount(addr);
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+      alert('Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
     }
-    const [addr] = await eth.request({ method: 'eth_requestAccounts' });
-    setProvider(p);
-    setAccount(addr);
-  }
+  }, [isConnecting, CHAIN_ID, RPC]);
 
   const refresh = useCallback(async () => {
     if (!account) return;
@@ -123,7 +160,7 @@ export default function App() {
   useEffect(() => {
     if (!account) return;
     refresh();
-    const id = setInterval(refresh, 10_000);
+    const id = setInterval(refresh, SWAP_CONSTANTS.BALANCE_REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [account, refresh]);
 
@@ -139,7 +176,7 @@ export default function App() {
 
   // approve handled by Liquidity tab below
 
-  async function getPoolReserves() {
+  const getPoolReserves = useCallback(async () => {
     try {
       const factory = new Contract(await (router as any).factory(), [
         'function getPair(address tokenA, address tokenB) view returns(address)'
@@ -174,9 +211,9 @@ export default function App() {
       console.error('Failed to get pool reserves:', error);
       return null;
     }
-  }
+  }, [router, rpcProvider, WTIA, YTK, ytkDec]);
 
-  async function calculateLiquidityAmount(tokenIn: 'TIA' | 'YTK', amountIn: string) {
+  const calculateLiquidityAmount = useCallback(async (tokenIn: 'TIA' | 'YTK', amountIn: string): Promise<LiquidityCalculation> => {
     try {
       const reserves = await getPoolReserves();
       if (!reserves) return null;
@@ -213,153 +250,119 @@ export default function App() {
       console.error('Failed to calculate liquidity amount:', error);
       return null;
     }
-  }
+  }, [getPoolReserves]);
 
-  async function addLiquidityEth(ytkAmount: string, tiaAmount: string) {
-    if (!provider || !account) return;
-    const s = await provider.getSigner();
-    const deadline = Math.floor(Date.now() / 1000) + 3600;
-    const tx = await (router as any).connect(s).addLiquidityETH(
-      YTK,
-      parseUnits(ytkAmount, ytkDec),
-      0, 0,
-      account,
-      deadline,
-      { value: parseEther(tiaAmount) }
-    );
-    await tx.wait();
-    alert('Liquidity added');
-  }
-
-  async function swapTIAforYTK(tia: string, minReceived: string) {
-    if (!provider || !account) return;
-
-    console.log('swapTIAforYTK called with:', { tia, minReceived });
-    console.log('Parsing tia amount:', tia, '->', parseEther(tia).toString());
-
-    // Validate inputs
-    const tiaAmount = Number(tia);
-    if (isNaN(tiaAmount) || tiaAmount <= 0) {
-      alert('Invalid TIA amount');
-      return;
-    }
-
-    // For very small amounts, set minimum received to 0 to avoid parsing issues
-    let minOut = 0n;
-    if (minReceived && minReceived !== 'Calculated on swap') {
-      try {
-        const minReceivedNum = Number(minReceived);
-        if (!isNaN(minReceivedNum) && minReceivedNum > 0 && minReceivedNum >= 1e-18) {
-          // Only set minimum if it's a reasonable amount
-          minOut = parseUnits(minReceived, ytkDec);
-        }
-      } catch (error) {
-        console.warn('Could not parse minimum received, using 0:', error);
-        minOut = 0n;
-      }
-    }
-
-    const s = await provider.getSigner();
-    const deadline = Math.floor(Date.now() / 1000) + 3600;
-    const path = [WTIA, YTK];
-
-    console.log('Swap path:', path);
-    console.log('WTIA address:', WTIA);
-    console.log('YTK address:', YTK);
+  const addLiquidityEth = useCallback(async (ytkAmount: string, tiaAmount: string) => {
+    if (!provider || !account || isAddingLiquidity) return;
+    setIsAddingLiquidity(true);
 
     try {
-      console.log('Swap parameters:', {
-        minOut: minOut.toString(),
-        path,
+      const s = await provider.getSigner();
+      const deadline = Math.floor(Date.now() / 1000) + SWAP_CONSTANTS.DEADLINE_BUFFER_SECONDS;
+
+      const tx = await (router as any).connect(s).addLiquidityETH(
+        YTK,
+        parseUnits(ytkAmount, ytkDec),
+        0, 0,
         account,
         deadline,
-        value: parseEther(tia).toString(),
-        tiaAmount: tia
-      });
+        { value: parseEther(tiaAmount) }
+      );
+      await tx.wait();
+      alert('Liquidity added');
+    } catch (error) {
+      await handleLiquidityError(error);
+    } finally {
+      setIsAddingLiquidity(false);
+    }
+  }, [provider, account, router, YTK, ytkDec, isAddingLiquidity]);
 
-      // Try with explicit gas limit first
+  const swapTIAforYTK = useCallback(async (tia: string, minReceived: string) => {
+    if (!provider || !account || isSwapping) return;
+    setIsSwapping(true);
+
+    try {
+      // Validate inputs
+      const validation = validateSwapAmount(tia, SWAP_CONSTANTS.MIN_SWAP_AMOUNT);
+      if (!validation.isValid) {
+        alert(validation.error);
+        return;
+      }
+
+      // Parse minimum received amount safely
+      let minOut = 0n;
+      if (minReceived && minReceived !== 'Calculated on swap') {
+        const minAmount = safeParseAmount(minReceived, ytkDec);
+        if (minAmount && minAmount >= BigInt(SWAP_CONSTANTS.MIN_REASONABLE_AMOUNT * Math.pow(10, ytkDec))) {
+          minOut = minAmount;
+        }
+      }
+
+      const s = await provider.getSigner();
+      const deadline = Math.floor(Date.now() / 1000) + SWAP_CONSTANTS.DEADLINE_BUFFER_SECONDS;
+      const path = [WTIA, YTK];
+
+      // Estimate gas with buffer
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gasEstimate = await (router as any).connect(s).swapExactETHForTokens.estimateGas(
         minOut, path, account, deadline, { value: parseEther(tia) }
       );
 
-      console.log('Estimated gas:', gasEstimate.toString());
+      const gasLimit = addGasBuffer(gasEstimate, SWAP_CONSTANTS.GAS_BUFFER_PERCENT);
 
+      // Execute transaction
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tx = await (router as any).connect(s).swapExactETHForTokens(
         minOut, path, account, deadline, {
           value: parseEther(tia),
-          gasLimit: gasEstimate * 120n / 100n // Add 20% buffer
+          gasLimit
         }
       );
 
-      console.log('Transaction sent:', tx.hash);
       await tx.wait();
       alert('Swap TIA -> YTK done');
     } catch (error) {
-      console.error('Swap failed:', error);
-
-      // Try to provide more specific error information
-      if (error instanceof Error) {
-        if (error.message.includes('CALL_EXCEPTION')) {
-          alert('Transaction would revert - check contract state or parameters');
-        } else if (error.message.includes('INSUFFICIENT_FUNDS')) {
-          alert('Insufficient funds for gas');
-        } else {
-          alert('Swap failed: ' + error.message);
-        }
-      } else {
-        alert('Swap failed: Unknown error');
-      }
+      await handleSwapError(error);
+    } finally {
+      setIsSwapping(false);
     }
-  }
+  }, [provider, account, router, WTIA, YTK, ytkDec, isSwapping]);
 
-  async function swapYTKforTIA(ytkAmount: string, minReceived: string) {
-    if (!provider || !account) return;
+  const swapYTKforTIA = useCallback(async (ytkAmount: string, minReceived: string) => {
+    if (!provider || !account || isSwapping) return;
+    setIsSwapping(true);
 
-    // Validate inputs
-    const ytkNum = Number(ytkAmount);
-    if (isNaN(ytkNum) || ytkNum <= 0) {
-      alert('Invalid YTK amount');
-      return;
-    }
-
-    const s = await provider.getSigner();
-
-    // Check and approve YTK spending
     try {
+      // Validate inputs
+      const validation = validateSwapAmount(ytkAmount, SWAP_CONSTANTS.MIN_SWAP_AMOUNT);
+      if (!validation.isValid) {
+        alert(validation.error);
+        return;
+      }
+
+      const s = await provider.getSigner();
+
+      // Check and approve YTK spending
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const current = await (ytk as any).allowance(account, ROUTER);
       if (current < parseUnits(ytkAmount, ytkDec)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const a = await (ytk as any).connect(s).approve(ROUTER, parseUnits(ytkAmount, ytkDec));
+        const a = await (ytk as any).connect(s).approve(ROUTER, parseUnits(APPROVAL_AMOUNTS.LARGE, ytkDec));
         await a.wait();
       }
-    } catch (error) {
-      console.error('Approval failed:', error);
-      alert('Failed to approve YTK spending');
-      return;
-    }
 
-    // For very small amounts, set minimum received to 0 to avoid parsing issues
-    let minOut = 0n;
-    if (minReceived && minReceived !== 'Calculated on swap') {
-      try {
-        const minReceivedNum = Number(minReceived);
-        if (!isNaN(minReceivedNum) && minReceivedNum > 0 && minReceivedNum >= 1e-18) {
-          // Only set minimum if it's a reasonable amount
-          minOut = parseEther(minReceived);
+      // Parse minimum received amount safely
+      let minOut = 0n;
+      if (minReceived && minReceived !== 'Calculated on swap') {
+        const minAmount = safeParseAmount(minReceived, 18); // TIA has 18 decimals
+        if (minAmount && minAmount >= BigInt(SWAP_CONSTANTS.MIN_REASONABLE_AMOUNT * Math.pow(10, 18))) {
+          minOut = minAmount;
         }
-      } catch (error) {
-        console.warn('Could not parse minimum received, using 0:', error);
-        minOut = 0n;
       }
-    }
 
-    const deadline = Math.floor(Date.now() / 1000) + 3600;
-    const path = [YTK, WTIA];
+      const deadline = Math.floor(Date.now() / 1000) + SWAP_CONSTANTS.DEADLINE_BUFFER_SECONDS;
+      const path = [YTK, WTIA];
 
-    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tx = await (router as any).connect(s).swapExactTokensForETH(
         parseUnits(ytkAmount, ytkDec), minOut, path, account, deadline
@@ -367,38 +370,49 @@ export default function App() {
       await tx.wait();
       alert('Swap YTK -> TIA done');
     } catch (error) {
-      console.error('Swap failed:', error);
-      alert('Swap failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      if (error instanceof Error && error.message.includes('approval')) {
+        await handleApprovalError(error);
+      } else {
+        await handleSwapError(error);
+      }
+    } finally {
+      setIsSwapping(false);
     }
-  }
+  }, [provider, account, ytk, router, YTK, ytkDec, WTIA, isSwapping]);
 
   const [tab, setTab] = useState(0);
 
   const [approved, setApproved] = useState(false);
-  async function approveYtk() {
-    if (!provider || !account) return;
-    const s = await provider.getSigner();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (ytk as any).connect(s).approve(ROUTER, parseUnits('1000000', ytkDec));
-    await tx.wait();
-    setApproved(true);
-  }
+  const approveYtk = useCallback(async () => {
+    if (!provider || !account || isApproving) return;
+    setIsApproving(true);
+
+    try {
+      const s = await provider.getSigner();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tx = await (ytk as any).connect(s).approve(ROUTER, parseUnits(APPROVAL_AMOUNTS.LARGE, ytkDec));
+      await tx.wait();
+      setApproved(true);
+    } catch (error) {
+      await handleApprovalError(error);
+    } finally {
+      setIsApproving(false);
+    }
+  }, [provider, account, ytk, ROUTER, ytkDec, isApproving]);
 
   // Quote helper for UI
-  async function getQuote(sellToken: 'TIA' | 'YTK', amount: string): Promise<string> {
+  const getQuote = useCallback(async (sellToken: TokenSymbol, amount: string): Promise<string> => {
     try {
       if (!amount || Number(amount) <= 0) return '';
 
       // Check if router is available and properly configured
       if (!router || ROUTER === '0x0000000000000000000000000000000000000000') {
-        console.warn('Router contract not configured. Please deploy contracts first.');
-        return 'Router not deployed';
+        return ERROR_MESSAGES.ROUTER_NOT_DEPLOYED;
       }
 
       // Check if WTIA is available
       if (WTIA === '0x0000000000000000000000000000000000000000') {
-        console.warn('WTIA contract not configured.');
-        return 'WTIA not deployed';
+        return ERROR_MESSAGES.WTIA_NOT_DEPLOYED;
       }
 
       const isSellTia = sellToken === 'TIA';
@@ -431,8 +445,7 @@ export default function App() {
         const amounts: bigint[] = await (router as any).getAmountsOut(amountIn, path);
 
         if (!amounts || amounts.length === 0) {
-          console.error('No amounts returned from getAmountsOut');
-          return 'No liquidity';
+          return ERROR_MESSAGES.NO_LIQUIDITY;
         }
 
         const out = amounts[amounts.length - 1];
@@ -452,7 +465,7 @@ export default function App() {
 
           const pairAddress = await factory.getPair(WTIA, YTK);
           if (pairAddress === ZeroAddress) {
-            return 'No liquidity pair found';
+            return ERROR_MESSAGES.NO_LIQUIDITY;
           }
 
           const pair = new Contract(pairAddress, [
@@ -530,7 +543,7 @@ export default function App() {
       }
       return 'Quote unavailable';
     }
-  }
+  }, [router, ROUTER, WTIA, rpcProvider, ytkDec]);
 
   return (
     <Container maxWidth={false} sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', px: 0 }}>
@@ -552,6 +565,10 @@ export default function App() {
         <Container maxWidth="sm">
           <Box sx={{ width: '100%', mb: 2 }}>
             <NetworkChecker />
+            {/* Show wallet connection test in production for debugging */}
+            {window.location.protocol === 'https:' && window.location.hostname !== 'localhost' && (
+              <WalletConnectionTest />
+            )}
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
             {tab === 0 ? (
@@ -562,6 +579,7 @@ export default function App() {
                 getQuote={getQuote}
                 onSwapEthToYtk={swapTIAforYTK}
                 onSwapYtkToEth={swapYTKforTIA}
+                isSwapping={isSwapping}
               />
             ) : (
               <LiquidityCard
@@ -573,6 +591,9 @@ export default function App() {
                 onApproveYtk={approveYtk}
                 onAddLiquidityEth={addLiquidityEth}
                 onCalculateLiquidityAmount={calculateLiquidityAmount}
+                isApproving={isApproving}
+                isAddingLiquidity={isAddingLiquidity}
+                isConnecting={isConnecting}
               />
             )}
           </Box>

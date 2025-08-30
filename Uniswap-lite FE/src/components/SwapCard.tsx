@@ -5,30 +5,27 @@ import { useAccount } from 'wagmi';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import TokenIcon from './TokenIcon';
 import TokenSelect from './TokenSelect';
-
-function formatBalance(value: string): string {
-  const num = Number(value);
-  if (!isFinite(num)) return value;
-  if (num === 0) return '0';
-  if (Math.abs(num) >= 1) {
-    // Show up to 2 decimals for values >= 1, trim trailing zeros
-    return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  }
-  // For small values, show up to 6 decimals, trimming trailing zeros
-  return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
-}
+import {
+  formatBalanceForSwap,
+  calculateMinReceived,
+  SLIPPAGE_PRESETS,
+  SLIPPAGE_LIMITS,
+  SWAP_CONSTANTS,
+  type TokenSymbol
+} from '../utils';
 
 export type SwapCardProps = {
   tiaBalance: string;
   wtiaBalance: string;
   ytkBalance: string;
-  getQuote: (sellToken: 'TIA'|'YTK', amount: string) => Promise<string>;
+  getQuote: (sellToken: TokenSymbol, amount: string) => Promise<string>;
   onSwapEthToYtk: (tia: string, minReceived: string) => Promise<void>;
   onSwapYtkToEth: (ytk: string, minReceived: string) => Promise<void>;
+  isSwapping?: boolean;
 };
 
-export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote, onSwapEthToYtk, onSwapYtkToEth }: SwapCardProps) {
-  const [sellToken, setSellToken] = useState<'TIA'|'YTK'>('TIA');
+export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote, onSwapEthToYtk, onSwapYtkToEth, isSwapping = false }: SwapCardProps) {
+  const [sellToken, setSellToken] = useState<TokenSymbol>('TIA');
   const [amount, setAmount] = useState<string>('');
 
   const { authenticated, login } = usePrivy();
@@ -38,39 +35,25 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
   const canSwap = useMemo(() => {
     if (!amount) return false;
     const amountNum = Number(amount);
-    return !isNaN(amountNum) && amountNum > 0 && amountNum >= 1e-6; // Minimum 0.000001 to avoid very small number issues
+    return !isNaN(amountNum) && amountNum > 0 && amountNum >= SWAP_CONSTANTS.MIN_SWAP_AMOUNT;
   }, [amount]);
 
   const onSwap = async () => {
     if (!canSwap) {
-      if (amount && Number(amount) < 1e-6) {
-        alert('Amount too small. Minimum amount is 0.000001');
+      if (amount && Number(amount) < SWAP_CONSTANTS.MIN_SWAP_AMOUNT) {
+        alert(`Amount too small. Minimum amount is ${SWAP_CONSTANTS.MIN_SWAP_AMOUNT}`);
       }
       return;
     }
 
     let minAmount: string;
     if (minReceived === 'Calculated on swap') {
-      // When quotes are unavailable, we'll calculate min received as amount * (1 - slippage/100)
+      // When quotes are unavailable, calculate min received based on slippage
       const amountNum = Number(amount);
-      if (!isNaN(amountNum) && amountNum > 0) {
-        const minReceiveAmount = amountNum * (1 - effectiveSlippagePct / 100);
-        // Ensure the minimum received is at least a reasonable small amount to avoid parsing issues
-        const finalMinAmount = Math.max(minReceiveAmount, 1e-18);
-        minAmount = finalMinAmount.toString();
-      } else {
-        minAmount = '0';
-      }
+      minAmount = calculateMinReceived(amountNum, effectiveSlippagePct, SWAP_CONSTANTS.MIN_REASONABLE_AMOUNT);
     } else {
       minAmount = minReceived || '0';
     }
-
-    console.log('SwapCard onSwap called:', {
-      sellToken,
-      amount,
-      minAmount,
-      minReceived
-    });
 
     if (sellToken === 'TIA') await onSwapEthToYtk(amount, minAmount);
     else await onSwapYtkToEth(amount, minAmount);
@@ -79,18 +62,17 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
   };
 
   const buyToken = sellToken === 'TIA' ? 'YTK' : 'TIA';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const balanceMap: Record<'TIA'|'WTIA'|'YTK', string> = { TIA: tiaBalance, WTIA: wtiaBalance, YTK: ytkBalance } as any;
+  const balanceMap: Record<TokenSymbol, string> = { TIA: tiaBalance, WTIA: wtiaBalance, YTK: ytkBalance };
   const sellBalance = sellToken === 'TIA' ? balanceMap.TIA : balanceMap.YTK;
   const buyBalance  = buyToken === 'TIA' ? balanceMap.TIA : balanceMap.YTK;
-  const sellBalanceDisplay = formatBalance(sellBalance);
-  const buyBalanceDisplay = formatBalance(buyBalance);
+  const sellBalanceDisplay = formatBalanceForSwap(sellBalance);
+  const buyBalanceDisplay = formatBalanceForSwap(buyBalance);
 
   const [quote, setQuote] = useState<string>('');
   const [isLoadingQuote, setIsLoadingQuote] = useState<boolean>(false);
   const [quoteError, setQuoteError] = useState<string>('');
 
-  const refreshQuote = useCallback(async (nextAmount: string, nextSell: 'TIA'|'YTK') => {
+  const refreshQuote = useCallback(async (nextAmount: string, nextSell: TokenSymbol) => {
     if (!nextAmount || Number(nextAmount) <= 0) {
       setQuote('');
       setQuoteError('');
@@ -116,25 +98,26 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
     } finally {
       setIsLoadingQuote(false);
     }
-  }, [getQuote, setQuote, setQuoteError, setIsLoadingQuote]);
+  }, [getQuote]);
 
   // Keep quote in sync whenever inputs change
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       refreshQuote(amount, sellToken);
-    }, 300); // Debounce to avoid too many API calls
+    }, SWAP_CONSTANTS.QUOTE_DEBOUNCE_MS);
 
     return () => clearTimeout(timeoutId);
   }, [amount, sellToken, refreshQuote]);
 
-  const [slippagePct, setSlippagePct] = useState<number>(1);
+  const [slippagePct, setSlippagePct] = useState<number>(SLIPPAGE_PRESETS[1]); // Default to 1%
   const [customSlippage, setCustomSlippage] = useState<string>('');
   const [useCustomSlippage, setUseCustomSlippage] = useState<boolean>(false);
+
   // Get the effective slippage percentage (preset or custom)
   const effectiveSlippagePct = useMemo(() => {
     if (useCustomSlippage && customSlippage) {
       const customValue = parseFloat(customSlippage);
-      if (!isNaN(customValue) && customValue > 0 && customValue <= 50) {
+      if (!isNaN(customValue) && customValue > 0 && customValue <= SLIPPAGE_LIMITS.MAX) {
         return customValue;
       }
     }
@@ -151,12 +134,12 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
       return '';
     }
     const min = q * (1 - effectiveSlippagePct / 100);
-    return formatBalance(String(min));
+    return formatBalanceForSwap(String(min));
   }, [quote, effectiveSlippagePct, quoteError]);
 
   const estimatedBuyAmount = useMemo(() => {
     if (!quote || Number(quote) <= 0) return '';
-    return formatBalance(quote);
+    return formatBalanceForSwap(quote);
   }, [quote]);
 
   return (
@@ -226,7 +209,7 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
               <Typography variant="body2" fontWeight={600}>Slippage Tolerance</Typography>
               <Stack direction="row" spacing={1} alignItems="center">
-                {[0.5, 1, 2].map(p => (
+                {SLIPPAGE_PRESETS.map(p => (
                   <Button
                     key={p}
                     size="small"
@@ -258,8 +241,8 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
                   inputProps={{
                     style: { textAlign: 'center' }
                   }}
-                  error={!!(useCustomSlippage && customSlippage && (isNaN(parseFloat(customSlippage)) || parseFloat(customSlippage) <= 0 || parseFloat(customSlippage) > 50))}
-                  helperText={useCustomSlippage && customSlippage && (isNaN(parseFloat(customSlippage)) || parseFloat(customSlippage) <= 0 || parseFloat(customSlippage) > 50) ? "0.1-50%" : ""}
+                  error={!!(useCustomSlippage && customSlippage && (isNaN(parseFloat(customSlippage)) || parseFloat(customSlippage) < SLIPPAGE_LIMITS.MIN || parseFloat(customSlippage) > SLIPPAGE_LIMITS.MAX))}
+                  helperText={useCustomSlippage && customSlippage && (isNaN(parseFloat(customSlippage)) || parseFloat(customSlippage) < SLIPPAGE_LIMITS.MIN || parseFloat(customSlippage) > SLIPPAGE_LIMITS.MAX) ? `${SLIPPAGE_LIMITS.MIN}-${SLIPPAGE_LIMITS.MAX}%` : ""}
                 />
               </Stack>
             </Stack>
@@ -279,11 +262,11 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
             <Button
               variant="contained"
               size="large"
-              disabled={isConnected ? !canSwap : false}
+              disabled={isConnected ? !canSwap || isSwapping : false}
               onClick={() => { if (!isConnected) login(); else onSwap(); }}
               sx={{ textTransform: 'none', fontWeight: 700 }}
             >
-              {isConnected ? 'Swap' : 'Connect Wallet'}
+              {isSwapping ? 'Swapping...' : isConnected ? 'Swap' : 'Connect Wallet'}
             </Button>
 
             {isConnected && canSwap && quoteError?.includes('temporarily unavailable') && (

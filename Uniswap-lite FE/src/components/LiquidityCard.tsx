@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Button, Card, CardContent, CircularProgress, Divider, InputAdornment, Skeleton, Stack, TextField, Typography } from '@mui/material';
 import TokenIcon from './TokenIcon';
+import { formatBalance } from '../utils';
 
 export type LiquidityCardProps = {
   account: string | null;
@@ -11,36 +12,27 @@ export type LiquidityCardProps = {
   onApproveYtk: () => Promise<void>;
   onAddLiquidityEth: (ytkAmount: string, tiaAmount: string) => Promise<void>;
   onCalculateLiquidityAmount: (tokenIn: 'TIA' | 'YTK', amountIn: string) => Promise<{ tiaAmount: string; ytkAmount: string } | null>;
+  isApproving?: boolean;
+  isAddingLiquidity?: boolean;
+  isConnecting?: boolean;
 };
 
-export default function LiquidityCard({ account, tiaBalance, ytkBalance, isApproved, onConnect, onApproveYtk, onAddLiquidityEth, onCalculateLiquidityAmount }: LiquidityCardProps) {
+export default function LiquidityCard({
+  account,
+  tiaBalance,
+  ytkBalance,
+  isApproved,
+  onConnect,
+  onApproveYtk,
+  onAddLiquidityEth,
+  onCalculateLiquidityAmount,
+  isApproving = false,
+  isAddingLiquidity = false,
+  isConnecting = false
+}: LiquidityCardProps) {
   const [ytkAmt, setYtkAmt] = useState('');
   const [tiaAmt, setTiaAmt] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
-
-  // Format balance to prevent excessive decimal places
-  const formatBalance = (balance: string) => {
-    if (!balance || balance === '0') return '0';
-
-    const num = parseFloat(balance);
-    if (isNaN(num)) return balance;
-
-    // For very small numbers (< 0.000001), use scientific notation
-    if (num > 0 && num < 0.000001) {
-      return num.toExponential(3);
-    }
-
-    // For very large numbers (> 1 million), use abbreviated format
-    if (num > 1000000) {
-      return (num / 1000000).toFixed(2) + 'M';
-    }
-
-    // For regular numbers, limit to 6 decimal places maximum
-    // Remove trailing zeros and unnecessary decimal point
-    let formatted = num.toFixed(6);
-    formatted = formatted.replace(/\.?0+$/, '');
-    return formatted || '0';
-  };
 
   const canSupply = !!ytkAmt && !!tiaAmt && Number(ytkAmt) > 0 && Number(tiaAmt) > 0;
 
@@ -163,11 +155,35 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
 
           {account ? (
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" fullWidth disabled={isApproved} onClick={onApproveYtk} sx={{ textTransform: 'none', fontWeight: 700 }}>Approve YTK</Button>
-              <Button variant="contained" fullWidth disabled={!canSupply} onClick={handleSupply} sx={{ textTransform: 'none', fontWeight: 700 }}>Supply</Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                disabled={isApproved || isApproving}
+                onClick={onApproveYtk}
+                sx={{ textTransform: 'none', fontWeight: 700 }}
+              >
+                {isApproving ? 'Approving...' : 'Approve YTK'}
+              </Button>
+              <Button
+                variant="contained"
+                fullWidth
+                disabled={!canSupply || isAddingLiquidity}
+                onClick={handleSupply}
+                sx={{ textTransform: 'none', fontWeight: 700 }}
+              >
+                {isAddingLiquidity ? 'Supplying...' : 'Supply'}
+              </Button>
             </Stack>
           ) : (
-            <Button variant="contained" size="large" onClick={onConnect} sx={{ textTransform: 'none', fontWeight: 700 }}>Connect Wallet</Button>
+            <Button
+              variant="contained"
+              size="large"
+              disabled={isConnecting}
+              onClick={onConnect}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            </Button>
           )}
         </Stack>
       </CardContent>
