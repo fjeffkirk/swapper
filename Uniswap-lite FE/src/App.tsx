@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, formatUnits, parseEther, parseUnits, ZeroAddress } from 'ethers';
 import { useAccount } from 'wagmi';
 import { NETWORK_INFO } from './config/privy';
@@ -83,7 +83,7 @@ export default function App() {
     setAccount(addr);
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     if (!account) return;
     const bal = await rpcProvider.getBalance(account);
     setTiaBal(formatEther(bal));
@@ -118,7 +118,7 @@ export default function App() {
     } catch {
       // ignore
     }
-  }
+  }, [account, rpcProvider, ytkDec, setYtkDec, setYtkBal, setTiaBal, setWtiaBal, ytk, wtia]);
 
   useEffect(() => {
     if (!account) return;

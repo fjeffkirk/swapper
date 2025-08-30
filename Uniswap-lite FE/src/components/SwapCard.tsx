@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Button, Card, CardContent, Divider, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { usePrivy } from '@privy-io/react-auth';
 import { useAccount } from 'wagmi';
@@ -90,7 +90,7 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
   const [isLoadingQuote, setIsLoadingQuote] = useState<boolean>(false);
   const [quoteError, setQuoteError] = useState<string>('');
 
-  const refreshQuote = async (nextAmount: string, nextSell: 'TIA'|'YTK') => {
+  const refreshQuote = useCallback(async (nextAmount: string, nextSell: 'TIA'|'YTK') => {
     if (!nextAmount || Number(nextAmount) <= 0) {
       setQuote('');
       setQuoteError('');
@@ -116,7 +116,7 @@ export default function SwapCard({ tiaBalance, wtiaBalance, ytkBalance, getQuote
     } finally {
       setIsLoadingQuote(false);
     }
-  };
+  }, [getQuote, setQuote, setQuoteError, setIsLoadingQuote]);
 
   // Keep quote in sync whenever inputs change
   useEffect(() => {
