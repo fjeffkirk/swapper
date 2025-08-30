@@ -18,6 +18,30 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
   const [tiaAmt, setTiaAmt] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
 
+  // Format balance to prevent excessive decimal places
+  const formatBalance = (balance: string) => {
+    if (!balance || balance === '0') return '0';
+
+    const num = parseFloat(balance);
+    if (isNaN(num)) return balance;
+
+    // For very small numbers (< 0.000001), use scientific notation
+    if (num > 0 && num < 0.000001) {
+      return num.toExponential(3);
+    }
+
+    // For very large numbers (> 1 million), use abbreviated format
+    if (num > 1000000) {
+      return (num / 1000000).toFixed(2) + 'M';
+    }
+
+    // For regular numbers, limit to 6 decimal places maximum
+    // Remove trailing zeros and unnecessary decimal point
+    let formatted = num.toFixed(6);
+    formatted = formatted.replace(/\.?0+$/, '');
+    return formatted || '0';
+  };
+
   const canSupply = !!ytkAmt && !!tiaAmt && Number(ytkAmt) > 0 && Number(tiaAmt) > 0;
 
   const handleTiaChange = async (value: string) => {
@@ -95,9 +119,9 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
               }}
             />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-              <Typography variant="caption" color="text.secondary">Balance: {ytkBalance}</Typography>
+              <Typography variant="caption" color="text.secondary">Balance: {formatBalance(ytkBalance)}</Typography>
               {ytkAmt ? (
-                <Typography variant="caption" color="text.secondary">Required: {ytkAmt} YTK</Typography>
+                <Typography variant="caption" color="text.secondary">Required: {formatBalance(ytkAmt)} YTK</Typography>
               ) : isCalculating ? (
                 <Skeleton variant="text" width={80} height={16} />
               ) : null}
@@ -126,9 +150,9 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
               }}
             />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-              <Typography variant="caption" color="text.secondary">Balance: {tiaBalance}</Typography>
+              <Typography variant="caption" color="text.secondary">Balance: {formatBalance(tiaBalance)}</Typography>
               {tiaAmt ? (
-                <Typography variant="caption" color="text.secondary">Required: {tiaAmt} TIA</Typography>
+                <Typography variant="caption" color="text.secondary">Required: {formatBalance(tiaAmt)} TIA</Typography>
               ) : isCalculating ? (
                 <Skeleton variant="text" width={80} height={16} />
               ) : null}
