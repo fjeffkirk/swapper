@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, Card, CardContent, Divider, Grid, InputAdornment, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, Divider, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import TokenIcon from './TokenIcon';
 
 export type LiquidityCardProps = {
@@ -36,7 +36,9 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
             <Typography variant="caption" color="text.secondary">Amount (YTK)</Typography>
             <TextField fullWidth placeholder="0" value={ytkAmt} onChange={e=>setYtkAmt(e.target.value)}
               InputProps={{ endAdornment: <InputAdornment position='end'><TokenIcon symbol='YTK' size={20} sx={{ mr: 1 }} /> YTK</InputAdornment> }} />
-            <Grid container justifyContent="space-between"><Grid item><Typography variant="caption" color="text.secondary">Balance: {ytkBalance}</Typography></Grid></Grid>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="caption" color="text.secondary">Balance: {ytkBalance}</Typography>
+            </Box>
           </Box>
 
           {/* Token B (TIA) */}
@@ -44,7 +46,9 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
             <Typography variant="caption" color="text.secondary">Amount (TIA)</Typography>
             <TextField fullWidth placeholder="0" value={tiaAmt} onChange={e=>setTiaAmt(e.target.value)}
               InputProps={{ endAdornment: <InputAdornment position='end'><TokenIcon symbol='TIA' size={20} sx={{ mr: 1 }} /> TIA</InputAdornment> }} />
-            <Grid container justifyContent="space-between"><Grid item><Typography variant="caption" color="text.secondary">Balance: {tiaBalance}</Typography></Grid></Grid>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="caption" color="text.secondary">Balance: {tiaBalance}</Typography>
+            </Box>
           </Box>
 
           <Divider />

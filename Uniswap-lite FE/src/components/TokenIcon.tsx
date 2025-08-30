@@ -1,4 +1,5 @@
-import { SvgIconProps, Box } from '@mui/material';
+import type { SvgIconProps } from '@mui/material';
+import { Box } from '@mui/material';
 import TIA from '../assets/tia.svg';
 import YTK from '../assets/ytk.svg';
 

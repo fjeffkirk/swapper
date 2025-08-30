@@ -10,8 +10,9 @@ contract AddLiquidity is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
 
-        address routerAddr = vm.envAddress("ROUTER");
-        address ytk = vm.envAddress("YTK");
+        // Use the correct deployed addresses
+        address routerAddr = 0x52FfddaD55fa773b4f127159E02C4C9B0cF54717;
+        address ytk = 0x00822a3c6c0ae9944b3fc4b79849fa20037fa2c6;
 
         UniswapV2Router02 router = UniswapV2Router02(payable(routerAddr));
 

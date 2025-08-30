@@ -1,4 +1,5 @@
-import { FormControl, MenuItem, Select, SelectChangeEvent, Stack, Typography } from '@mui/material';
+import { FormControl, MenuItem, Select, Stack, Typography } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import TokenIcon from './TokenIcon';
 
 export type TokenSymbol = 'TIA' | 'WTIA' | 'YTK';

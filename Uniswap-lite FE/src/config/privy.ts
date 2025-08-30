@@ -12,9 +12,9 @@ export const NETWORK_INFO = {
 export const PRIVY_APP_ID = (import.meta.env.DEV ? import.meta.env.VITE_PRIVY_APP_ID_DEV : import.meta.env.VITE_PRIVY_APP_ID_PROD) as string;
 
 export const PRIVY_CONFIG = {
-  appearance: { theme: 'dark', accentColor: '#1DA1F2' },
-  loginMethods: ['email', 'google', 'twitter', 'wallet'],
-  embeddedWallets: { createOnLogin: 'users-without-wallets' },
+  appearance: { theme: 'dark' as const, accentColor: '#1DA1F2' as const },
+  loginMethods: ['email', 'google', 'twitter', 'wallet'] as ('email'|'google'|'twitter'|'wallet')[],
+  embeddedWallets: { createOnLogin: 'users-without-wallets' as const },
   session: { maxAge: 60 * 60 * 24 * 7 },
   storage: { createIfNotFound: true },
   supportedChains: [
@@ -27,4 +27,4 @@ export const PRIVY_CONFIG = {
       blockExplorers: NETWORK_INFO.explorerUrl ? { default: { name: NETWORK_INFO.explorerName, url: NETWORK_INFO.explorerUrl } } : undefined,
     }
   ],
-} as const;
+};
