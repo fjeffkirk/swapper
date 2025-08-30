@@ -139,6 +139,82 @@ export default function App() {
 
   // approve handled by Liquidity tab below
 
+  async function getPoolReserves() {
+    try {
+      const factory = new Contract(await (router as any).factory(), [
+        'function getPair(address tokenA, address tokenB) view returns(address)'
+      ], rpcProvider);
+
+      const pairAddress = await factory.getPair(WTIA, YTK);
+      if (pairAddress === ZeroAddress) {
+        throw new Error('No liquidity pair found');
+      }
+
+      const pair = new Contract(pairAddress, [
+        'function getReserves() view returns(uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+        'function token0() view returns(address)',
+        'function token1() view returns(address)'
+      ], rpcProvider);
+
+      const [reserve0, reserve1] = await pair.getReserves();
+      const token0 = await pair.token0();
+
+      // Determine which reserve is which token
+      const [wtiaReserve, ytkReserve] = token0.toLowerCase() === WTIA.toLowerCase()
+        ? [reserve0, reserve1]
+        : [reserve1, reserve0];
+
+      return {
+        tiaReserve: wtiaReserve,
+        ytkReserve: ytkReserve,
+        totalTia: formatEther(wtiaReserve),
+        totalYtk: formatUnits(ytkReserve, ytkDec)
+      };
+    } catch (error) {
+      console.error('Failed to get pool reserves:', error);
+      return null;
+    }
+  }
+
+  async function calculateLiquidityAmount(tokenIn: 'TIA' | 'YTK', amountIn: string) {
+    try {
+      const reserves = await getPoolReserves();
+      if (!reserves) return null;
+
+      const inputAmount = Number(amountIn);
+      if (isNaN(inputAmount) || inputAmount <= 0) return null;
+
+      if (tokenIn === 'TIA') {
+        // User is providing TIA, calculate required YTK
+        const tiaReserveNum = Number(reserves.totalTia);
+        const ytkReserveNum = Number(reserves.totalYtk);
+
+        if (tiaReserveNum === 0) return null;
+
+        const requiredYtk = (inputAmount * ytkReserveNum) / tiaReserveNum;
+        return {
+          tiaAmount: amountIn,
+          ytkAmount: requiredYtk.toString()
+        };
+      } else {
+        // User is providing YTK, calculate required TIA
+        const tiaReserveNum = Number(reserves.totalTia);
+        const ytkReserveNum = Number(reserves.totalYtk);
+
+        if (ytkReserveNum === 0) return null;
+
+        const requiredTia = (inputAmount * tiaReserveNum) / ytkReserveNum;
+        return {
+          tiaAmount: requiredTia.toString(),
+          ytkAmount: amountIn
+        };
+      }
+    } catch (error) {
+      console.error('Failed to calculate liquidity amount:', error);
+      return null;
+    }
+  }
+
   async function addLiquidityEth(ytkAmount: string, tiaAmount: string) {
     if (!provider || !account) return;
     const s = await provider.getSigner();
@@ -496,6 +572,7 @@ export default function App() {
                 onConnect={connect}
                 onApproveYtk={approveYtk}
                 onAddLiquidityEth={addLiquidityEth}
+                onCalculateLiquidityAmount={calculateLiquidityAmount}
               />
             )}
           </Box>
