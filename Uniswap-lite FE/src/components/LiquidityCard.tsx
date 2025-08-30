@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, Card, CardContent, Divider, InputAdornment, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, CircularProgress, Divider, InputAdornment, Skeleton, Stack, TextField, Typography } from '@mui/material';
 import TokenIcon from './TokenIcon';
 
 export type LiquidityCardProps = {
@@ -75,9 +75,16 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
 
           {/* Token A (YTK) */}
           <Box>
-            <Typography variant="caption" color="text.secondary">
-              Amount (YTK) {isCalculating && <span style={{ color: '#1976d2' }}>• Calculating...</span>}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Typography variant="caption" color="text.secondary">Amount (YTK)</Typography>
+              {isCalculating && (
+                <CircularProgress
+                  size={14}
+                  thickness={4}
+                  sx={{ color: 'primary.main', opacity: 0.7 }}
+                />
+              )}
+            </Box>
             <TextField
               fullWidth
               placeholder="0"
@@ -87,17 +94,28 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
                 endAdornment: <InputAdornment position='end'><TokenIcon symbol='YTK' size={20} sx={{ mr: 1 }} /> YTK</InputAdornment>
               }}
             />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
               <Typography variant="caption" color="text.secondary">Balance: {ytkBalance}</Typography>
-              {ytkAmt && <Typography variant="caption" color="text.secondary">Required: {ytkAmt} YTK</Typography>}
+              {ytkAmt ? (
+                <Typography variant="caption" color="text.secondary">Required: {ytkAmt} YTK</Typography>
+              ) : isCalculating ? (
+                <Skeleton variant="text" width={80} height={16} />
+              ) : null}
             </Box>
           </Box>
 
           {/* Token B (TIA) */}
           <Box>
-            <Typography variant="caption" color="text.secondary">
-              Amount (TIA) {isCalculating && <span style={{ color: '#1976d2' }}>• Calculating...</span>}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Typography variant="caption" color="text.secondary">Amount (TIA)</Typography>
+              {isCalculating && (
+                <CircularProgress
+                  size={14}
+                  thickness={4}
+                  sx={{ color: 'primary.main', opacity: 0.7 }}
+                />
+              )}
+            </Box>
             <TextField
               fullWidth
               placeholder="0"
@@ -107,9 +125,13 @@ export default function LiquidityCard({ account, tiaBalance, ytkBalance, isAppro
                 endAdornment: <InputAdornment position='end'><TokenIcon symbol='TIA' size={20} sx={{ mr: 1 }} /> TIA</InputAdornment>
               }}
             />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
               <Typography variant="caption" color="text.secondary">Balance: {tiaBalance}</Typography>
-              {tiaAmt && <Typography variant="caption" color="text.secondary">Required: {tiaAmt} TIA</Typography>}
+              {tiaAmt ? (
+                <Typography variant="caption" color="text.secondary">Required: {tiaAmt} TIA</Typography>
+              ) : isCalculating ? (
+                <Skeleton variant="text" width={80} height={16} />
+              ) : null}
             </Box>
           </Box>
 
