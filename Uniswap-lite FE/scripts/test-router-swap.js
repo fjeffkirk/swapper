@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 
 // Network configuration
 const RPC_URL = 'https://rpc.sketchpad-1.forma.art';
-const ROUTER_ADDRESS = '0x1687ecad448aB465ED427490167BC18D83D294aE';
+const ROUTER_ADDRESS = '0x592a36b069843cbaEB0df6FA1cFae5009418E45d';
 const WTIA_ADDRESS = '0xBae5E4D473FdAAc18883850c56857Be7874b7B9c';
 const YTK_ADDRESS = '0x00822A3c6CA0E9944B3fc4b79849fa20037fa2C6';
 

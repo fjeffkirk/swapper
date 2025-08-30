@@ -13,7 +13,7 @@ import NetworkChecker from './components/NetworkChecker';
 const RPC: string  = NETWORK_INFO.rpcUrl as string;
 const CHAIN_ID: number = Number(NETWORK_INFO.chainId);
 // Router address from your deployment
-const ROUTER: string = (import.meta.env.VITE_ROUTER as string) || '0x1687ecad448aB465ED427490167BC18D83D294aE';
+const ROUTER: string = (import.meta.env.VITE_ROUTER as string) || '0x592a36b069843cbaEB0df6FA1cFae5009418E45d';
     console.log('🔄 Router address:', ROUTER);
     console.log('🔄 VITE_ROUTER env:', import.meta.env.VITE_ROUTER);
     console.log('🔄 Environment check:', { VITE_ROUTER: import.meta.env.VITE_ROUTER });

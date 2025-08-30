@@ -10,6 +10,9 @@ interface IUniswapV2Pair {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
+    function mint(address to) external returns (uint liquidity);
+    function transfer(address to, uint value) external returns (bool);
+    function balanceOf(address owner) external view returns (uint);
 }
 
 interface IERC20 {
@@ -113,6 +116,55 @@ contract SecureUniswapV2Router {
             : (amounts[1], uint(0));
 
         pairContract.swap(amount0Out, amount1Out, to, new bytes(0));
+    }
+
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
+        require(token == YTK, 'SecureRouter: ONLY_YTK_SUPPORTED');
+
+        // Security: Validate pair
+        address pair = IUniswapV2Factory(factory).getPair(WETH, token);
+        require(pair == SECURE_PAIR, 'SecureRouter: UNAUTHORIZED_PAIR');
+
+        // Wrap ETH to WETH
+        IWETH(WETH).deposit{value: msg.value}();
+
+        // Transfer WETH to pair
+        IERC20(WETH).transfer(pair, msg.value);
+
+        // Transfer tokens to pair (need approval from user first)
+        IERC20(token).transferFrom(msg.sender, pair, amountTokenDesired);
+
+        // Mint LP tokens
+        IUniswapV2Pair pairContract = IUniswapV2Pair(pair);
+        liquidity = pairContract.mint(to);
+
+        // Get actual amounts used
+        (uint reserve0, uint reserve1,) = pairContract.getReserves();
+        address token0 = pairContract.token0();
+
+        if (token0 == WETH) {
+            amountETH = msg.value;
+            amountToken = amountTokenDesired;
+        } else {
+            amountETH = amountTokenDesired;
+            amountToken = msg.value;
+        }
+
+        // Refund excess tokens if any
+        if (amountToken > amountTokenDesired) {
+            IERC20(token).transfer(msg.sender, amountToken - amountTokenDesired);
+        }
+        if (amountETH > msg.value) {
+            IWETH(WETH).withdraw(amountETH - msg.value);
+            payable(msg.sender).transfer(amountETH - msg.value);
+        }
     }
 
     // Security function to verify pair authenticity
